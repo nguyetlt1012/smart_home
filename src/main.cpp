@@ -1,159 +1,128 @@
 #include <Arduino.h>
 
 #include <WiFi.h>
-#include <AsyncTCP.h>
-#include <ESPAsyncWebServer.h>
+#include <PubSubClient.h>
 
+#define LED1 15
+#define LED2 2
+String ledStatus1 = "ON";
+String ledStatus2 = "ON";
 // Replace with your network credentials
 const char *ssid = "Base 2.4";
 const char *password = "B@se9009";
 
-bool led1State = 0;
-bool led2State = 0;
-const int led1Pin = 15;
-const int led2Pin = 2;
+#define MQTT_SERVER "broker.hivemq.com"
+#define MQTT_PORT 1883
 
-// Create AsyncWebServer object on port 80
-AsyncWebServer server(80);
-AsyncWebSocket ws("/ws");
+#define MQTT_LED1_TOPIC "mqtt_esp32/led1"
+#define MQTT_LED2_TOPIC "mqtt_esp32/led2"
 
-const char index_html[] PROGMEM = R"rawliteral(
-<!DOCTYPE HTML><html>
-<head>
-  <title>ESP Websocket Web Server Websocket</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" href="data:,">
-<title>ESP Web Server</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="icon" href="data:,">
-</head>
-<body>
-  <div class="topnav">
-    <h1>ESP WebSocket Server</h1>
-  </div>
-  <div class="content">
-    <div class="card">
-      <h2>Khue Nguyen Creator</h2>
-      <p class="state1">LED1: <span id="state1">%STATE1%</span></p>
-      <p><button id="button1" class="button1">BUTTON1</button></p>
-       <p class="state1">LED2: <span id="state2">%STATE2%</span></p>
-      <p><button id="button2" class="button2">BUTTON2</button></p>
-    </div>
-  </div>
-</body>
-</html>
-)rawliteral";
+WiFiClient wifiClient;
+PubSubClient client(wifiClient);
 
-void notifyClients()
+void setup_wifi()
 {
-    ws.textAll(String(led1State) + String(led2State));
-}
-
-void handleWebSocketMessage(void *arg, uint8_t *data, size_t len)
-{
-    AwsFrameInfo *info = (AwsFrameInfo *)arg;
-    if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT)
-    {
-        data[len] = 0;
-        if (strcmp((char *)data, "toggle1") == 0)
-        {
-            led1State = !led1State;
-            notifyClients();
-        }
-        if (strcmp((char *)data, "toggle2") == 0)
-        {
-            led2State = !led2State;
-            notifyClients();
-        }
-    }
-}
-
-void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type,
-             void *arg, uint8_t *data, size_t len)
-{
-    switch (type)
-    {
-    case WS_EVT_CONNECT:
-        Serial.printf("WebSocket client #%u connected from %s\n", client->id(), client->remoteIP().toString().c_str());
-        break;
-    case WS_EVT_DISCONNECT:
-        Serial.printf("WebSocket client #%u disconnected\n", client->id());
-        break;
-    case WS_EVT_DATA:
-        handleWebSocketMessage(arg, data, len);
-        break;
-    case WS_EVT_PONG:
-    case WS_EVT_ERROR:
-        break;
-    }
-}
-
-void initWebSocket()
-{
-    ws.onEvent(onEvent);
-    server.addHandler(&ws);
-}
-
-String processor(const String &var)
-{
-    Serial.println(var);
-    if (var == "STATE1")
-    {
-        if (led1State)
-        {
-            return "ON";
-        }
-        else
-        {
-            return "OFF";
-        }
-    }
-    if (var == "STATE2")
-    {
-        if (led2State)
-        {
-            return "ON";
-        }
-        else
-        {
-            return "OFF";
-        }
-    }
-}
-
-void setup()
-{
-    // Serial port for debugging purposes
-    Serial.begin(115200);
-
-    pinMode(led1Pin, OUTPUT);
-    digitalWrite(led1Pin, LOW);
-    pinMode(led2Pin, OUTPUT);
-    digitalWrite(led2Pin, LOW);
-    // Connect to Wi-Fi
+    Serial.print("Connecting to ");
+    Serial.println(ssid);
     WiFi.begin(ssid, password);
     while (WiFi.status() != WL_CONNECTED)
     {
-        delay(1000);
-        Serial.println("Connecting to WiFi..");
+        delay(500);
+        Serial.print(".");
     }
-
-    // Print ESP Local IP Address
+    Serial.println("");
+    Serial.println("WiFi connected");
+    Serial.println("IP address: ");
     Serial.println(WiFi.localIP());
-
-    initWebSocket();
-
-    // Route for root / web page
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
-              { request->send_P(200, "text/html", index_html, processor); });
-
-    // Start server
-    server.begin();
 }
 
-void loop()
+void connect_to_broker()
 {
-    ws.cleanupClients();
-    digitalWrite(led1Pin, led1State);
-    digitalWrite(led2Pin, led2State);
+    while (!client.connected())
+    {
+        Serial.print("Attemping mqtt connection...");
+        String clientId = "ESP32";
+        clientId += String(random(0xffff), HEX);
+        if (client.connect(clientId.c_str()))
+        {
+            Serial.println("connected");
+            client.subscribe(MQTT_LED1_TOPIC);
+            client.subscribe(MQTT_LED2_TOPIC);
+        }
+        else
+        {
+            Serial.print("failed, rc=");
+            Serial.print(client.state());
+            Serial.println(" try again in 2 seconds");
+            delay(2000);
+        }
+    }
+}
+
+void callback(char *topic, byte *payload, unsigned int length)
+{
+    char status[20];
+    Serial.println("-------new message from broker-----");
+    Serial.print("topic: ");
+    Serial.println(topic);
+    Serial.print("message: ");
+    Serial.write(payload, length);
+    Serial.println();
+    for (int i = 0; i < length; i++)
+    {
+        status[i] = payload[i];
+    }
+    Serial.println(status);
+    if (String(topic) == MQTT_LED1_TOPIC)
+    {
+        if (String(status) == "OFF")
+        {
+            ledStatus1 = "OFF";
+            digitalWrite(LED1, LOW);
+            Serial.println("LED1 OFF");
+        }
+        else if (String(status) == "ON")
+        {
+            ledStatus1 = "ON";
+            digitalWrite(LED1, HIGH);
+            Serial.println("LED1 ON");
+        }
+    }
+
+    if (String(topic) == MQTT_LED2_TOPIC)
+    {
+        if (String(status) == "OFF")
+        {
+            ledStatus2 = "OFF";
+            digitalWrite(LED2, LOW);
+            Serial.println("LED2 OFF");
+        }
+        else if (String(status) == "ON")
+        {
+            ledStatus2 = "ON";
+            digitalWrite(LED2, HIGH);
+            Serial.println("LED2 ON");
+        }
+    }
+}
+void setup()
+{
+    Serial.begin(9600);
+    Serial.setTimeout(500);
+    setup_wifi();
+    client.setServer(MQTT_SERVER, MQTT_PORT);
+    client.setCallback(callback);
+    connect_to_broker();
+    Serial.println("Start transfer");
+    pinMode(LED1, OUTPUT);
+    pinMode(LED2, OUTPUT);
+}
+
+void loop(){
+    client.loop();
+    if (!client.connected())
+    {
+        connect_to_broker();
+    }
+    
 }
