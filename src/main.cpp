@@ -2,20 +2,29 @@
 
 #include <WiFi.h>
 #include <PubSubClient.h>
+#include <ArduinoJson.h>
 
 #define LED1 15
 #define LED2 2
-String ledStatus1 = "ON";
-String ledStatus2 = "ON";
+
+String ledStatus1 = "OFF";
+String ledStatus2 = "OFF";
 // Replace with your network credentials
-const char *ssid = "Base 2.4";
-const char *password = "B@se9009";
+const char *ssid = "WFKL";
+const char *password = "71759919kl";
+
+//mqtt broker
+const char *led1Id = "led001";
+const char *led2Id = "led002";
+
+StaticJsonDocument<256> sendingStatusLed;
 
 #define MQTT_SERVER "broker.hivemq.com"
 #define MQTT_PORT 1883
 
-#define MQTT_LED1_TOPIC "mqtt_esp32/led1"
-#define MQTT_LED2_TOPIC "mqtt_esp32/led2"
+#define MQTT_LED_TOPIC_SUB "mqtt_esp32/smart_home"
+#define MQTT_LED_TOPIC_PUB "mqtt_esp32/led2"
+
 
 WiFiClient wifiClient;
 PubSubClient client(wifiClient);
@@ -46,8 +55,7 @@ void connect_to_broker()
         if (client.connect(clientId.c_str()))
         {
             Serial.println("connected");
-            client.subscribe(MQTT_LED1_TOPIC);
-            client.subscribe(MQTT_LED2_TOPIC);
+            client.subscribe(MQTT_LED_TOPIC_SUB);
         }
         else
         {
@@ -68,40 +76,56 @@ void callback(char *topic, byte *payload, unsigned int length)
     Serial.print("message: ");
     Serial.write(payload, length);
     Serial.println();
-    for (int i = 0; i < length; i++)
-    {
-        status[i] = payload[i];
-    }
-    Serial.println(status);
-    if (String(topic) == MQTT_LED1_TOPIC)
-    {
-        if (String(status) == "OFF")
-        {
-            ledStatus1 = "OFF";
+    StaticJsonDocument<256> doc;
+    deserializeJson(doc, payload);
+
+    if (doc["value"] == "OFF"){
+        if (strcmp(doc["deviceId"], led1Id) == 0 ){
+            ledStatus1 == "OFF";
             digitalWrite(LED1, LOW);
             Serial.println("LED1 OFF");
+            //publish led1
+            // sendingStatusLed["value"] = ledStatus1;
+            // sendingStatusLed["deviceId"] = led1Id;
+            // char out[256];
+            // serializeJson(sendingStatusLed, out);
+            // client.publish(MQTT_LED_TOPIC_PUB, out, true);
         }
-        else if (String(status) == "ON")
-        {
-            ledStatus1 = "ON";
-            digitalWrite(LED1, HIGH);
-            Serial.println("LED1 ON");
-        }
-    }
-
-    if (String(topic) == MQTT_LED2_TOPIC)
-    {
-        if (String(status) == "OFF")
-        {
-            ledStatus2 = "OFF";
+        if (strcmp(doc["deviceId"], led2Id) == 0){
+            ledStatus2 == "OFF";
             digitalWrite(LED2, LOW);
             Serial.println("LED2 OFF");
+            // sendingStatusLed["roomId"] = roomId1;
+            sendingStatusLed["value"] = ledStatus2;
+            sendingStatusLed["deviceId"] = led2Id;
+            char out[256];
+            serializeJson(sendingStatusLed, out);
+            client.publish(MQTT_LED_TOPIC_PUB, out, true);
+
         }
-        else if (String(status) == "ON")
-        {
-            ledStatus2 = "ON";
+    }else if (doc["value"] == "ON"){
+        if (strcmp(doc["deviceId"], led1Id) == 0){
+            ledStatus1 == "ON";
+            digitalWrite(LED1, HIGH);
+            Serial.println("LED1 ON");
+            //publish led1
+            // sendingStatusLed["value"] = ledStatus1;
+            // sendingStatusLed["deviceId"] = led1Id;
+            // char out[256];
+            // serializeJson(sendingStatusLed, out);
+            // client.publish(MQTT_LED_TOPIC_PUB, out, true);
+        }
+        if (strcmp(doc["deviceId"], led2Id) == 0){
+            ledStatus2== "ON";
             digitalWrite(LED2, HIGH);
             Serial.println("LED2 ON");
+
+            // sendingStatusLed["roomId"] = roomId1;
+            sendingStatusLed["value"] = ledStatus2;
+            sendingStatusLed["deviceId"] = led2Id;
+            char out[256];
+            serializeJson(sendingStatusLed, out);
+            client.publish(MQTT_LED_TOPIC_PUB, out, true);
         }
     }
 }
@@ -116,6 +140,8 @@ void setup()
     Serial.println("Start transfer");
     pinMode(LED1, OUTPUT);
     pinMode(LED2, OUTPUT);
+    digitalWrite(LED1, HIGH);
+    digitalWrite(LED2, HIGH);
 }
 
 void loop(){
