@@ -15,8 +15,8 @@ const char *ssid = "POCO M3";
 const char *password = "12345678";
 
 // mqtt broker
-const char *led1Id = "63d4fc57d977b7b5ec8076c0";
-const char *led2Id = "63edd40aa0dbe4ad7f8408cc";
+const char *led1Id = "63d4fc57d977b7b5ec8076c2";
+const char *led2Id = "63d4fc57d977b7b5ec8076c3";
 volatile byte state1 = HIGH;
 volatile byte state2 = HIGH;
 
@@ -142,14 +142,14 @@ void loop()
         while (digitalRead(BUT1) == 0){
             /* cho nut dc nha */
         }
-        ledStatus1 = ledStatus1 == "ON" ? "OFF" : "ON";
-        state1 = ledStatus1 == "ON" ? HIGH : LOW;
+        ledStatus1 = (ledStatus1 == "ON") ? "OFF" : "ON";
+        state1 = (ledStatus1 == "ON")? HIGH : LOW;
         digitalWrite(LED1, state1);
         sendingStatusLed["control"]["status"] = ledStatus1;
         sendingStatusLed["deviceId"] = led1Id;
         char out[256];
         serializeJson(sendingStatusLed, out);
-        client.publish(MQTT_LED_TOPIC_PUB, out, true);
+        client.publish(MQTT_LED_TOPIC_PUB, out, false);
     }
     if (digitalRead(BUT2) == 0)
     {
@@ -157,13 +157,13 @@ void loop()
         while (digitalRead(BUT2) == 0){
             /* cho nut dc nha */
         }
-        ledStatus2 = ledStatus2 == "ON" ? "OFF" : "ON";
-        state2 = ledStatus2 == "ON" ? HIGH : LOW;
+        ledStatus2 = (ledStatus2 == "ON") ? "OFF" : "ON";
+        state2 = (ledStatus2 == "ON") ? HIGH : LOW;
         digitalWrite(LED2, state2);
         sendingStatusLed["control"]["status"] = ledStatus2;
         sendingStatusLed["deviceId"] = led2Id;
         char out[256];
         serializeJson(sendingStatusLed, out);
-        client.publish(MQTT_LED_TOPIC_PUB, out, true);
+        client.publish(MQTT_LED_TOPIC_PUB, out, false);
     }
 }
